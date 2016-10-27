@@ -70,7 +70,7 @@ public class ElideResourceTest {
     resource = new ElideResource(elide,
         PREFIX,
         rc -> null,
-        EnumSet.allOf(ElideResource.Verbs.class));
+        EnumSet.allOf(ElideResource.Methods.class));
 
     addToDataStore(new Thing("1", "flerp"));
     addToDataStore(new Thing("2", "florpe"));
@@ -125,7 +125,7 @@ public class ElideResourceTest {
 
   @Test
   public void shouldReturn405IfMethodNotEnabled() throws Exception {
-    resource = new ElideResource(elide, PREFIX, rc -> null, EnumSet.of(ElideResource.Verbs.POST));
+    resource = new ElideResource(elide, PREFIX, rc -> null, EnumSet.of(ElideResource.Methods.POST));
 
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "GET"));
 
@@ -141,7 +141,7 @@ public class ElideResourceTest {
 
   @Test
   public void shouldSupportPrefixWithTrailingSlash() throws Exception {
-    resource = new ElideResource(elide, PREFIX + "/", rc -> null, EnumSet.of(ElideResource.Verbs.GET));
+    resource = new ElideResource(elide, PREFIX + "/", rc -> null, EnumSet.of(ElideResource.Methods.GET));
 
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "GET"));
 
@@ -152,7 +152,7 @@ public class ElideResourceTest {
   public void shouldFailForPrefixWithoutLeadingSlash() throws Exception {
     thrown.expect(IllegalArgumentException.class);
 
-    new ElideResource(elide, PREFIX.substring(1), rc -> null, EnumSet.of(ElideResource.Verbs.GET));
+    new ElideResource(elide, PREFIX.substring(1), rc -> null, EnumSet.of(ElideResource.Methods.GET));
   }
 
   @Test
@@ -233,7 +233,7 @@ public class ElideResourceTest {
   public void shouldReturn406ForMediaTypeParametersInAllAcceptOptions() throws Exception {
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "GET")
         .withHeader("Accept",
-            "application/vnd.api+json; charset=utf-8, application/vnd.api+json; charset=us-ascii")
+            "application/vnd.api+json;charset=utf-8, application/vnd.api+json;charset=us-ascii")
         .withPayload(toBody(new Thing("19", "hi"))));
 
     assertThat(response, hasStatus(withCode(NOT_ACCEPTABLE)));
@@ -242,7 +242,7 @@ public class ElideResourceTest {
   @Test
   public void shouldSupportMediaTypeParametersInOneAcceptOptions() throws Exception {
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "GET")
-        .withHeader("Accept", "application/vnd.api+json; charset=utf-8, application/vnd.api+json")
+        .withHeader("Accept", "application/vnd.api+json;charset=utf-8,application/vnd.api+json")
         .withPayload(toBody(new Thing("19", "hi"))));
 
     assertThat(response, hasStatus(withCode(OK)));

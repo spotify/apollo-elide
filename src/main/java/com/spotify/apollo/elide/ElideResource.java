@@ -3,6 +3,9 @@ package com.spotify.apollo.elide;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
+import com.google.common.base.Splitter;
+import com.google.common.net.MediaType;
+import com.spotify.apollo.Request;
 import com.spotify.apollo.RequestContext;
 import com.spotify.apollo.Response;
 import com.spotify.apollo.Status;
@@ -13,7 +16,9 @@ import com.yahoo.elide.Elide;
 import com.yahoo.elide.ElideResponse;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import javax.ws.rs.core.MultivaluedHashMap;
@@ -23,10 +28,9 @@ import okio.ByteString;
  * Hooks up Apollo endpoints with Elide.
  */
 public class ElideResource {
-  public enum Verbs {
+  public enum Methods {
     GET,
     POST,
-    PUT,
     PATCH,
     DELETE
   }
@@ -38,7 +42,7 @@ public class ElideResource {
   ElideResource(Elide elide,
                 String pathPrefix,
                 Function<RequestContext, Object> userFunction,
-                Set<Verbs> enabledVerbs) {
+                Set<Methods> enabledMethods) {
     checkArgument(pathPrefix.startsWith("/"), "Path prefix must start with '/' (got '%s')", pathPrefix);
     this.elide = requireNonNull(elide);
     this.pathPrefix = pathPrefix.endsWith("/") ? pathPrefix : pathPrefix + "/";
@@ -53,7 +57,51 @@ public class ElideResource {
         Route.sync("PUT", pathPrefix + "<query-path:path>", this::put),
         Route.sync("PATCH", pathPrefix + "<query-path:path>", this::patch)
     )
-        .map(r -> r.withMiddleware(this::serializeJsonApi));
+        .map(r -> r.withMiddleware(this::serializeJsonApi))
+        .map(r -> r.withMiddleware(ElideResource::validateHeaders));
+  }
+
+  private static AsyncHandler<Response<ByteString>> validateHeaders(
+      AsyncHandler<Response<ByteString>> handler) {
+    return requestContext -> {
+      if (contentTypeHasMediaTypeParameters(requestContext.request())) {
+        return CompletableFuture
+            .completedFuture(Response.<ByteString>forStatus(Status.UNSUPPORTED_MEDIA_TYPE));
+      } else if (acceptHeaderHasNoParameterlessJsonApiMediaType(requestContext.request())) {
+        return CompletableFuture
+            .completedFuture(Response.<ByteString>forStatus(Status.NOT_ACCEPTABLE));
+      } else {
+        return handler.invoke(requestContext);
+      }
+    };
+  }
+
+  private static boolean acceptHeaderHasNoParameterlessJsonApiMediaType(Request request) {
+    Optional<String> header = headerValueIgnoreCase(request, "accept");
+
+    if (!header.isPresent()) {
+      return false;
+    }
+
+    Optional<String> mediaTypeWithoutParameter = Splitter.on(',').trimResults()
+        .splitToList(header.get()).stream()
+        .filter(s -> MediaType.parse(s).parameters().isEmpty())
+        .findAny();
+
+    return !mediaTypeWithoutParameter.isPresent();
+  }
+
+  private static boolean contentTypeHasMediaTypeParameters(Request request) {
+    Optional<String> header = headerValueIgnoreCase(request, "content-type");
+
+    return header.isPresent() && !MediaType.parse(header.get()).parameters().isEmpty();
+  }
+
+  private static Optional<String> headerValueIgnoreCase(Request request, String headerKey) {
+    return request.headers().entrySet().stream()
+          .filter(entry -> entry.getKey().equalsIgnoreCase(headerKey))
+          .map(Map.Entry::getValue)
+          .findAny();
   }
 
   private AsyncHandler<Response<ByteString>> serializeJsonApi(
