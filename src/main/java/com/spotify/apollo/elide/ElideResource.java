@@ -63,7 +63,7 @@ public class ElideResource {
     this.enabledMethods = ImmutableSet.copyOf(enabledMethods);
   }
 
-  Stream<Route<AsyncHandler<Response<ByteString>>>> routes() {
+  public Stream<Route<AsyncHandler<Response<ByteString>>>> routes() {
     return enabledMethods.stream()
         .map(method -> Route.sync(
             method.name(),
