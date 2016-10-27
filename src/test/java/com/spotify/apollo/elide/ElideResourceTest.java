@@ -71,10 +71,7 @@ public class ElideResourceTest {
     dataStore = new InMemoryDataStore(Package.getPackage("com.spotify.apollo.elide.testmodel"));
     elide = new Elide.Builder(dataStore).build();
 
-    resource = new ElideResource(elide,
-        PREFIX,
-        rc -> null,
-        EnumSet.allOf(Method.class));
+    resource = ElideResource.builder(PREFIX, elide).build();
 
     addToDataStore(new Thing("1", "flerp"));
     addToDataStore(new Thing("2", "florpe"));
@@ -130,7 +127,7 @@ public class ElideResourceTest {
   @Test
   public void shouldHaveNoRouteForDisabledMethod() throws Exception {
     EnumSet<Method> allButGet = EnumSet.complementOf(EnumSet.of(Method.GET));
-    resource = new ElideResource(elide, PREFIX, rc -> null, allButGet);
+    resource = ElideResource.builder(PREFIX, elide).enabledMethods(allButGet).build();
 
     assertThat(
         resource.routes()
@@ -148,7 +145,7 @@ public class ElideResourceTest {
 
   @Test
   public void shouldSupportPrefixWithTrailingSlash() throws Exception {
-    resource = new ElideResource(elide, PREFIX + "/", rc -> null, EnumSet.of(Method.GET));
+    resource = ElideResource.builder(PREFIX + "/", elide).build();
 
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "GET"));
 
@@ -159,7 +156,7 @@ public class ElideResourceTest {
   public void shouldFailForPrefixWithoutLeadingSlash() throws Exception {
     thrown.expect(IllegalArgumentException.class);
 
-    new ElideResource(elide, PREFIX.substring(1), rc -> null, EnumSet.of(Method.GET));
+    ElideResource.builder(PREFIX.substring(1), elide);
   }
 
   @Test
@@ -248,11 +245,9 @@ public class ElideResourceTest {
   public void shouldPassUserSuppliedByFunctionToElide() throws Exception {
     Elide spiedElide = spy(elide);
 
-    resource = new ElideResource(
-        spiedElide,
-        PREFIX,
-        rc -> rc.request().uri() + "-soopasecret",
-        EnumSet.allOf(Method.class));
+    resource = ElideResource.builder(PREFIX, spiedElide)
+        .userFunction(rc -> rc.request().uri() + "-soopasecret")
+        .build();
 
     invokeRoute(Request.forUri("/prefix/thing"));
 

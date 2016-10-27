@@ -33,7 +33,7 @@ import okio.ByteString;
  */
 public class ElideResource {
 
-  public static final String PATH_PARAMETER_NAME = "query-path";
+  private static final String PATH_PARAMETER_NAME = "query-path";
 
   public enum Method {
     GET(ElideResource::get),
@@ -53,11 +53,10 @@ public class ElideResource {
   private final Function<RequestContext, Object> userFunction;
   private final Set<Method> enabledMethods;
 
-  ElideResource(Elide elide,
+  private ElideResource(Elide elide,
                 String pathPrefix,
                 Function<RequestContext, Object> userFunction,
-                EnumSet<Method> enabledMethods) {
-    checkArgument(pathPrefix.startsWith("/"), "Path prefix must start with '/' (got '%s')", pathPrefix);
+                Set<Method> enabledMethods) {
     this.elide = requireNonNull(elide);
     this.pathPrefix = pathPrefix.endsWith("/") ? pathPrefix : pathPrefix + "/";
     this.userFunction = requireNonNull(userFunction);
@@ -194,5 +193,38 @@ public class ElideResource {
     }
 
     return map;
+  }
+
+  public static Builder builder(String pathPrefix, Elide elide) {
+    return new Builder(pathPrefix, elide);
+  }
+
+  public static class Builder {
+    private final String pathPrefix;
+    private final Elide elide;
+    private Function<RequestContext, Object> userFunction = rc -> null;
+    private Set<Method> enabledMethods = EnumSet.allOf(Method.class);
+
+    private Builder(String pathPrefix, Elide elide) {
+      checkArgument(
+          pathPrefix.startsWith("/"),
+          "Path prefix must start with '/' (got '%s')", pathPrefix);
+      this.pathPrefix = requireNonNull(pathPrefix);
+      this.elide = requireNonNull(elide);
+    }
+
+    public Builder userFunction(Function<RequestContext, Object> userFunction) {
+      this.userFunction = userFunction;
+      return this;
+    }
+
+    public Builder enabledMethods(Set<Method> enabledMethods) {
+      this.enabledMethods = ImmutableSet.copyOf(enabledMethods);
+      return this;
+    }
+
+    public ElideResource build() {
+      return new ElideResource(elide, pathPrefix, userFunction, enabledMethods);
+    }
   }
 }
