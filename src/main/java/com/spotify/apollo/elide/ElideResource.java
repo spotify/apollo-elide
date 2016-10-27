@@ -1,10 +1,12 @@
 package com.spotify.apollo.elide;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
 
 import com.spotify.apollo.RequestContext;
 import com.spotify.apollo.Response;
 import com.spotify.apollo.Status;
+import com.spotify.apollo.StatusType;
 import com.spotify.apollo.route.AsyncHandler;
 import com.spotify.apollo.route.Route;
 import com.yahoo.elide.Elide;
@@ -37,6 +39,7 @@ public class ElideResource {
                 String pathPrefix,
                 Function<RequestContext, Object> userFunction,
                 Set<Verbs> enabledVerbs) {
+    checkArgument(pathPrefix.startsWith("/"), "Path prefix must start with '/' (got '%s')", pathPrefix);
     this.elide = requireNonNull(elide);
     this.pathPrefix = pathPrefix.endsWith("/") ? pathPrefix : pathPrefix + "/";
     this.userFunction = requireNonNull(userFunction);
@@ -95,9 +98,14 @@ public class ElideResource {
             payloadAsString(requestContext),
             null);
 
-    return Response.of(
-        Status.createForCode(elideResponse.getResponseCode()),
-        elideResponse.getBody());
+
+    StatusType statusCode = Status.createForCode(elideResponse.getResponseCode());
+
+    if (elideResponse.getBody() == null) {
+      return Response.forStatus(statusCode);
+    }
+
+    return Response.of(statusCode, elideResponse.getBody());
   }
 
   private Response<String> put(RequestContext requestContext) {

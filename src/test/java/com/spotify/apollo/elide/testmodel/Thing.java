@@ -6,12 +6,15 @@ import javax.persistence.Id;
 @Entity
 public class Thing {
   @Id
-  public int id;
+  public String id;
 
   public String name;
   public String description = "description";
 
-  public Thing(int id, String name) {
+  public Thing() {
+  }
+
+  public Thing(String id, String name) {
     this.id = id;
     this.name = name;
   }

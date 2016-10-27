@@ -27,7 +27,7 @@
 
     <properties>
         <apollo.version>1.3.0</apollo.version>
-        <elide.version>2.4.2</elide.version>
+        <elide.version>2.4.3-SNAPSHOT</elide.version>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
@@ -104,7 +104,6 @@
             <plugin>
                 <artifactId>maven-failsafe-plugin</artifactId>
             </plugin>
-
         </plugins>
     </build>
 </project>
