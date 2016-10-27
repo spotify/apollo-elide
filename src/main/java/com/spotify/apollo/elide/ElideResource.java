@@ -2,8 +2,10 @@ package com.spotify.apollo.elide;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
+import static java.util.concurrent.CompletableFuture.completedFuture;
 
 import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.net.MediaType;
 import com.spotify.apollo.Request;
 import com.spotify.apollo.RequestContext;
@@ -12,13 +14,15 @@ import com.spotify.apollo.Status;
 import com.spotify.apollo.StatusType;
 import com.spotify.apollo.route.AsyncHandler;
 import com.spotify.apollo.route.Route;
+import com.spotify.apollo.route.SyncHandler;
 import com.yahoo.elide.Elide;
 import com.yahoo.elide.ElideResponse;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import javax.ws.rs.core.MultivaluedHashMap;
@@ -28,35 +32,44 @@ import okio.ByteString;
  * Hooks up Apollo endpoints with Elide.
  */
 public class ElideResource {
-  public enum Methods {
-    GET,
-    POST,
-    PATCH,
-    DELETE
+
+  public static final String PATH_PARAMETER_NAME = "query-path";
+
+  public enum Method {
+    GET(ElideResource::get),
+    POST(ElideResource::post),
+    PATCH(ElideResource::patch),
+    DELETE(ElideResource::delete);
+
+    private final BiFunction<Elide, Function<RequestContext, Object>, SyncHandler<Response<String>>> handler;
+
+    Method(BiFunction<Elide, Function<RequestContext, Object>, SyncHandler<Response<String>>> handler) {
+      this.handler = handler;
+    }
   }
 
   private final Elide elide;
   private final String pathPrefix;
   private final Function<RequestContext, Object> userFunction;
+  private final Set<Method> enabledMethods;
 
   ElideResource(Elide elide,
                 String pathPrefix,
                 Function<RequestContext, Object> userFunction,
-                Set<Methods> enabledMethods) {
+                EnumSet<Method> enabledMethods) {
     checkArgument(pathPrefix.startsWith("/"), "Path prefix must start with '/' (got '%s')", pathPrefix);
     this.elide = requireNonNull(elide);
     this.pathPrefix = pathPrefix.endsWith("/") ? pathPrefix : pathPrefix + "/";
     this.userFunction = requireNonNull(userFunction);
+    this.enabledMethods = ImmutableSet.copyOf(enabledMethods);
   }
 
   Stream<Route<AsyncHandler<Response<ByteString>>>> routes() {
-    return Stream.of(
-        Route.sync("GET", pathPrefix + "<query-path:path>", this::get),
-        Route.sync("POST", pathPrefix + "<query-path:path>", this::post),
-        Route.sync("DELETE", pathPrefix + "<query-path:path>", this::delete),
-        Route.sync("PUT", pathPrefix + "<query-path:path>", this::put),
-        Route.sync("PATCH", pathPrefix + "<query-path:path>", this::patch)
-    )
+    return enabledMethods.stream()
+        .map(method -> Route.sync(
+            method.name(),
+            pathPrefix + "<query-path:path>",
+            method.handler.apply(elide, userFunction)))
         .map(r -> r.withMiddleware(this::serializeJsonApi))
         .map(r -> r.withMiddleware(ElideResource::validateHeaders));
   }
@@ -65,18 +78,16 @@ public class ElideResource {
       AsyncHandler<Response<ByteString>> handler) {
     return requestContext -> {
       if (contentTypeHasMediaTypeParameters(requestContext.request())) {
-        return CompletableFuture
-            .completedFuture(Response.<ByteString>forStatus(Status.UNSUPPORTED_MEDIA_TYPE));
-      } else if (acceptHeaderHasNoParameterlessJsonApiMediaType(requestContext.request())) {
-        return CompletableFuture
-            .completedFuture(Response.<ByteString>forStatus(Status.NOT_ACCEPTABLE));
+        return completedFuture(Response.<ByteString>forStatus(Status.UNSUPPORTED_MEDIA_TYPE));
+      } else if (acceptHeaderHasNoJsonApiMediaTypeWithoutParameters(requestContext.request())) {
+        return completedFuture(Response.<ByteString>forStatus(Status.NOT_ACCEPTABLE));
       } else {
         return handler.invoke(requestContext);
       }
     };
   }
 
-  private static boolean acceptHeaderHasNoParameterlessJsonApiMediaType(Request request) {
+  private static boolean acceptHeaderHasNoJsonApiMediaTypeWithoutParameters(Request request) {
     Optional<String> header = headerValueIgnoreCase(request, "accept");
 
     if (!header.isPresent()) {
@@ -111,61 +122,55 @@ public class ElideResource {
             .withPayload(response.payload().map(ByteString::encodeUtf8).orElse(null)));
   }
 
-  private Response<String> get(RequestContext requestContext) {
-    ElideResponse response =
-        // TODO: do something better wrt the user; should standardise on something; this something
-        // should probably be oauth-related somehow
-        elide.get(requestContext.pathArgs().get("query-path"),
+  private static SyncHandler<Response<String>> get(
+      Elide elide,
+      Function<RequestContext, Object> userFunction) {
+    return requestContext -> toApolloResponse(
+        elide.get(
+            requestContext.pathArgs().get(PATH_PARAMETER_NAME),
             queryParams(requestContext.request().parameters()),
-            null);
-
-    return Response.of(Status.createForCode(response.getResponseCode()),  response.getBody());
+            userFunction.apply(requestContext)));
   }
 
-  private Response<String> post(RequestContext requestContext) {
-    String body = payloadAsString(requestContext);
+  private static SyncHandler<Response<String>> post(Elide elide,
+                                                    Function<RequestContext, Object> userFunction) {
+    return requestContext -> {
+      String body = payloadAsString(requestContext);
 
-    ElideResponse response =
-        // TODO: do something better wrt the user; should standardise on something; this something
-        // should probably be oauth-related somehow
-        elide.post(requestContext.pathArgs().get("query-path"), body, null);
-
-    return toApolloResponse(response);
+      return toApolloResponse(
+          elide.post(
+              requestContext.pathArgs().get(PATH_PARAMETER_NAME),
+              body,
+              userFunction.apply(requestContext)));
+    };
   }
 
-  private Response<String> delete(RequestContext requestContext) {
-    ElideResponse response =
-        // TODO: do something better wrt the user; should standardise on something; this something
-        // should probably be oauth-related somehow
+  private static SyncHandler<Response<String>> delete(Elide elide,
+                                                      Function<RequestContext, Object> userFunction) {
+
+    return requestContext -> toApolloResponse(
         elide.delete(
-            requestContext.pathArgs().get("query-path"),
+            requestContext.pathArgs().get(PATH_PARAMETER_NAME),
             payloadAsString(requestContext),
-            null);
-
-    return toApolloResponse(response);
+            userFunction.apply(requestContext)));
   }
 
-  private Response<String> put(RequestContext requestContext) {
-    return Response.forStatus(Status.INTERNAL_SERVER_ERROR);
+  private static SyncHandler<Response<String>> patch(Elide elide,
+                                                     Function<RequestContext, Object> userFunction) {
+    return requestContext -> {
+      Request request = requestContext.request();
+
+      return toApolloResponse(
+          elide.patch(
+              headerValueIgnoreCase(request, "content-type").orElse(null),
+              headerValueIgnoreCase(request, "accept").orElse(null),
+              requestContext.pathArgs().get(PATH_PARAMETER_NAME),
+              payloadAsString(requestContext),
+              userFunction.apply(requestContext)));
+    };
   }
 
-  private Response<String> patch(RequestContext requestContext) {
-    Request request = requestContext.request();
-
-    ElideResponse response =
-        // TODO: do something better wrt the user; should standardise on something; this something
-        // should probably be oauth-related somehow
-        elide.patch(
-            headerValueIgnoreCase(request, "content-type").orElse(null),
-            headerValueIgnoreCase(request, "accept").orElse(null),
-            requestContext.pathArgs().get("query-path"),
-            payloadAsString(requestContext),
-            null);
-
-    return toApolloResponse(response);
-  }
-
-  private Response<String> toApolloResponse(ElideResponse response) {
+  private static Response<String> toApolloResponse(ElideResponse response) {
     StatusType statusCode = Status.createForCode(response.getResponseCode());
 
     if (response.getBody() == null) {
@@ -175,13 +180,13 @@ public class ElideResource {
     return Response.of(statusCode, response.getBody());
   }
 
-  private String payloadAsString(RequestContext requestContext) {
+  private static String payloadAsString(RequestContext requestContext) {
     return requestContext.request().payload()
         .map(ByteString::utf8)
         .orElse(null);
   }
 
-  private MultivaluedHashMap<String, String> queryParams(Map<String, List<String>> parameters) {
+  private static MultivaluedHashMap<String, String> queryParams(Map<String, List<String>> parameters) {
     MultivaluedHashMap<String, String> map = new MultivaluedHashMap<>();
 
     for (String queryParameterName : parameters.keySet()) {

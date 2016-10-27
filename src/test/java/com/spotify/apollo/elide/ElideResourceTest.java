@@ -1,7 +1,6 @@
 package com.spotify.apollo.elide;
 
 import static com.spotify.apollo.Status.CREATED;
-import static com.spotify.apollo.Status.METHOD_NOT_ALLOWED;
 import static com.spotify.apollo.Status.NOT_ACCEPTABLE;
 import static com.spotify.apollo.Status.NO_CONTENT;
 import static com.spotify.apollo.Status.OK;
@@ -11,11 +10,14 @@ import static com.spotify.apollo.test.unit.ResponseMatchers.hasStatus;
 import static com.spotify.apollo.test.unit.StatusTypeMatchers.withCode;
 import static java.util.Optional.empty;
 import static java.util.stream.Collectors.toList;
-import static org.hamcrest.CoreMatchers.any;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
-import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,6 +27,7 @@ import com.spotify.apollo.Client;
 import com.spotify.apollo.Request;
 import com.spotify.apollo.Response;
 import com.spotify.apollo.Status;
+import com.spotify.apollo.elide.ElideResource.Method;
 import com.spotify.apollo.elide.testmodel.Thing;
 import com.spotify.apollo.request.RequestContexts;
 import com.spotify.apollo.request.RequestMetadataImpl;
@@ -41,6 +44,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.ws.rs.core.MultivaluedMap;
 import okio.ByteString;
 import org.junit.Before;
 import org.junit.Rule;
@@ -70,7 +74,7 @@ public class ElideResourceTest {
     resource = new ElideResource(elide,
         PREFIX,
         rc -> null,
-        EnumSet.allOf(ElideResource.Methods.class));
+        EnumSet.allOf(Method.class));
 
     addToDataStore(new Thing("1", "flerp"));
     addToDataStore(new Thing("2", "florpe"));
@@ -124,12 +128,15 @@ public class ElideResourceTest {
   }
 
   @Test
-  public void shouldReturn405IfMethodNotEnabled() throws Exception {
-    resource = new ElideResource(elide, PREFIX, rc -> null, EnumSet.of(ElideResource.Methods.POST));
+  public void shouldHaveNoRouteForDisabledMethod() throws Exception {
+    EnumSet<Method> allButGet = EnumSet.complementOf(EnumSet.of(Method.GET));
+    resource = new ElideResource(elide, PREFIX, rc -> null, allButGet);
 
-    Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "GET"));
-
-    assertThat(response, hasStatus(withCode(Status.METHOD_NOT_ALLOWED)));
+    assertThat(
+        resource.routes()
+            .filter(r -> r.method().equals("GET"))
+            .findAny(),
+        is(empty()));
   }
 
   @Test
@@ -141,7 +148,7 @@ public class ElideResourceTest {
 
   @Test
   public void shouldSupportPrefixWithTrailingSlash() throws Exception {
-    resource = new ElideResource(elide, PREFIX + "/", rc -> null, EnumSet.of(ElideResource.Methods.GET));
+    resource = new ElideResource(elide, PREFIX + "/", rc -> null, EnumSet.of(Method.GET));
 
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "GET"));
 
@@ -152,7 +159,7 @@ public class ElideResourceTest {
   public void shouldFailForPrefixWithoutLeadingSlash() throws Exception {
     thrown.expect(IllegalArgumentException.class);
 
-    new ElideResource(elide, PREFIX.substring(1), rc -> null, EnumSet.of(ElideResource.Methods.GET));
+    new ElideResource(elide, PREFIX.substring(1), rc -> null, EnumSet.of(Method.GET));
   }
 
   @Test
@@ -210,14 +217,6 @@ public class ElideResourceTest {
   }
 
   @Test
-  public void shouldReturn405ForPut() throws Exception {
-    Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing/1", "PUT")
-        .withPayload(toBody(new Thing("19", "hi"))));
-
-    assertThat(response, hasStatus(withCode(METHOD_NOT_ALLOWED)));
-  }
-
-  @Test
   public void shouldReturn415ForMediaTypeParametersInRequestContentType() throws Exception {
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "POST")
         .withHeader("content-type", "application/vnd.api+json; charset=utf-8")
@@ -247,7 +246,21 @@ public class ElideResourceTest {
 
   @Test
   public void shouldPassUserSuppliedByFunctionToElide() throws Exception {
-    fail();
+    Elide spiedElide = spy(elide);
+
+    resource = new ElideResource(
+        spiedElide,
+        PREFIX,
+        rc -> rc.request().uri() + "-soopasecret",
+        EnumSet.allOf(Method.class));
+
+    invokeRoute(Request.forUri("/prefix/thing"));
+
+    verify(spiedElide).get(
+        anyString(),
+        any(MultivaluedMap.class),
+        eq("/prefix/thing-soopasecret")
+    );
   }
 
   private void addToDataStore(Thing thing) {
