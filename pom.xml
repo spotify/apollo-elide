@@ -25,6 +25,14 @@
         </developer>
     </developers>
 
+    <licenses>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <properties>
         <apollo.version>1.3.0</apollo.version>
         <elide.version>2.4.3-SNAPSHOT</elide.version>
