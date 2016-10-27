@@ -181,17 +181,6 @@ public class ElideResourceTest {
   }
 
   @Test
-  public void shouldIncludeLocationHeaderForCreateWithoutId() throws Exception {
-    Thing thing = new Thing("1", "hasNoId");
-    thing.id = null;
-
-    Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "POST")
-        .withPayload(toBody(thing)));
-
-    assertThat(response, hasHeader("location", any(String.class)));
-  }
-
-  @Test
   public void shouldSupportDelete() throws Exception {
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing/1", "DELETE"));
 
@@ -206,10 +195,18 @@ public class ElideResourceTest {
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing/1", "PATCH")
         .withPayload(toBody(thing)));
 
+    if (response.payload().isPresent()) {
+      assertThat(response, hasStatus(withCode(OK)));
+    } else {
+      assertThat(response, hasStatus(withCode(NO_CONTENT)));
+    }
+
+    response = invokeRoute(Request.forUri("/prefix/thing/1", "GET"));
+
     JsonNode jsonNode = successfulAsJson(response);
 
-    assertThat(jsonNode.get("data").get("attributes").get("description"), is("cooldesc"));
-    assertThat(jsonNode.get("data").get("attributes").get("name"), is("flerp"));
+    assertThat(jsonNode.get("data").get("attributes").get("description").asText(), is("cooldesc"));
+    assertThat(jsonNode.get("data").get("attributes").get("name").asText(), is("flerp"));
   }
 
   @Test
@@ -299,16 +296,28 @@ public class ElideResourceTest {
   }
 
   private ByteString toBody(Thing thing) {
+    // verry sophisticate json mappings indeed
+    if (thing.name != null) {
+      return ByteString.encodeUtf8(
+          String.format("{ \"data\": {"
+                        + "\"id\": \"%s\","
+                        + "\"type\": \"thing\","
+                        + "\"attributes\": {"
+                        + "\"name\": \"%s\", "
+                        + "\"description\": \"%s\""
+                        + "}"
+                        + "}"
+                        + "}", thing.id, thing.name, thing.description));
+    }
+
     return ByteString.encodeUtf8(
         String.format("{ \"data\": {"
                       + "\"id\": \"%s\","
                       + "\"type\": \"thing\","
                       + "\"attributes\": {"
-                      + "\"name\": \"%s\", "
                       + "\"description\": \"%s\""
                       + "}"
                       + "}"
-                      + "}", thing.id, thing.name, thing.description)
-    );
+                      + "}", thing.id, thing.description));
   }
 }

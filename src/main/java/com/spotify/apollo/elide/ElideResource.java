@@ -112,33 +112,29 @@ public class ElideResource {
   }
 
   private Response<String> get(RequestContext requestContext) {
-    ElideResponse elideResponse =
+    ElideResponse response =
         // TODO: do something better wrt the user; should standardise on something; this something
         // should probably be oauth-related somehow
         elide.get(requestContext.pathArgs().get("query-path"),
             queryParams(requestContext.request().parameters()),
             null);
 
-    return Response.of(
-        Status.createForCode(elideResponse.getResponseCode()),
-        elideResponse.getBody());
+    return Response.of(Status.createForCode(response.getResponseCode()),  response.getBody());
   }
 
   private Response<String> post(RequestContext requestContext) {
     String body = payloadAsString(requestContext);
 
-    ElideResponse elideResponse =
+    ElideResponse response =
         // TODO: do something better wrt the user; should standardise on something; this something
         // should probably be oauth-related somehow
         elide.post(requestContext.pathArgs().get("query-path"), body, null);
 
-    return Response.of(
-        Status.createForCode(elideResponse.getResponseCode()),
-        elideResponse.getBody());
+    return toApolloResponse(response);
   }
 
   private Response<String> delete(RequestContext requestContext) {
-    ElideResponse elideResponse =
+    ElideResponse response =
         // TODO: do something better wrt the user; should standardise on something; this something
         // should probably be oauth-related somehow
         elide.delete(
@@ -146,14 +142,7 @@ public class ElideResource {
             payloadAsString(requestContext),
             null);
 
-
-    StatusType statusCode = Status.createForCode(elideResponse.getResponseCode());
-
-    if (elideResponse.getBody() == null) {
-      return Response.forStatus(statusCode);
-    }
-
-    return Response.of(statusCode, elideResponse.getBody());
+    return toApolloResponse(response);
   }
 
   private Response<String> put(RequestContext requestContext) {
@@ -161,7 +150,29 @@ public class ElideResource {
   }
 
   private Response<String> patch(RequestContext requestContext) {
-    return Response.forStatus(Status.INTERNAL_SERVER_ERROR);
+    Request request = requestContext.request();
+
+    ElideResponse response =
+        // TODO: do something better wrt the user; should standardise on something; this something
+        // should probably be oauth-related somehow
+        elide.patch(
+            headerValueIgnoreCase(request, "content-type").orElse(null),
+            headerValueIgnoreCase(request, "accept").orElse(null),
+            requestContext.pathArgs().get("query-path"),
+            payloadAsString(requestContext),
+            null);
+
+    return toApolloResponse(response);
+  }
+
+  private Response<String> toApolloResponse(ElideResponse response) {
+    StatusType statusCode = Status.createForCode(response.getResponseCode());
+
+    if (response.getBody() == null) {
+      return Response.forStatus(statusCode);
+    }
+
+    return Response.of(statusCode, response.getBody());
   }
 
   private String payloadAsString(RequestContext requestContext) {
