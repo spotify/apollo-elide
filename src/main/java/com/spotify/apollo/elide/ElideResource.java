@@ -48,7 +48,7 @@ import javax.ws.rs.core.MultivaluedHashMap;
 import okio.ByteString;
 
 /**
- * Hooks up Apollo endpoints with Elide.
+ * Hooks up Apollo endpoints with Elide. Instantiate via the {@link #builder(String, Elide)} method.
  */
 public class ElideResource {
 
@@ -214,6 +214,12 @@ public class ElideResource {
     return map;
   }
 
+  /**
+   * Create a builder for a resource that will pick up requests starting with the supplied path
+   * prefix.
+   *
+   * @throws IllegalArgumentException unless the path starts with a forward slash
+   */
   public static Builder builder(String pathPrefix, Elide elide) {
     return new Builder(pathPrefix, elide);
   }
@@ -232,11 +238,23 @@ public class ElideResource {
       this.elide = requireNonNull(elide);
     }
 
+    /**
+     * Configure the function that creates a 'user' object for use with Elide access control based
+     * on the {@link RequestContext}. See http://elide.io/pages/guide/03-security.html for details
+     * about security in Elide.
+     * <p/>
+     * Defaults to a function that always returns 'null'.
+     */
     public Builder userFunction(Function<RequestContext, Object> userFunction) {
       this.userFunction = userFunction;
       return this;
     }
 
+    /**
+     * Determine which {@link Method}s should be enabled for this resource.
+     * <p/>
+     * Defaults to 'all methods enabled'.
+     */
     public Builder enabledMethods(Set<Method> enabledMethods) {
       this.enabledMethods = ImmutableSet.copyOf(enabledMethods);
       return this;
