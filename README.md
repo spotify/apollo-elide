@@ -23,5 +23,4 @@ This project adheres to the [Open Code of Conduct][code-of-conduct]. By particip
 
 # TODO notes
 
-- validate/fix code coverage and CI once repo is public
 - support PATCH via X-HTTP-Method-Override: PATCH header
