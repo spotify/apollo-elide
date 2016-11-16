@@ -153,6 +153,10 @@ public class ElideResource {
   private static SyncHandler<Response<String>> post(Elide elide,
                                                     Function<RequestContext, Object> userFunction) {
     return requestContext -> {
+      if (isPatchOverride(requestContext.request())) {
+        return doPatch(requestContext, elide, userFunction);
+      }
+
       String body = payloadAsString(requestContext);
 
       return toApolloResponse(
@@ -161,6 +165,12 @@ public class ElideResource {
               body,
               userFunction.apply(requestContext)));
     };
+  }
+
+  private static boolean isPatchOverride(Request request) {
+    return request.header("X-HTTP-Method-Override")
+        .map(override -> override.equalsIgnoreCase("PATCH"))
+        .orElse(false);
   }
 
   private static SyncHandler<Response<String>> delete(Elide elide,
@@ -175,17 +185,21 @@ public class ElideResource {
 
   private static SyncHandler<Response<String>> patch(Elide elide,
                                                      Function<RequestContext, Object> userFunction) {
-    return requestContext -> {
-      Request request = requestContext.request();
+    return requestContext -> doPatch(requestContext, elide, userFunction);
+  }
 
-      return toApolloResponse(
-          elide.patch(
-              headerValueIgnoreCase(request, "content-type").orElse(null),
-              headerValueIgnoreCase(request, "accept").orElse(null),
-              requestContext.pathArgs().get(PATH_PARAMETER_NAME),
-              payloadAsString(requestContext),
-              userFunction.apply(requestContext)));
-    };
+  private static Response<String> doPatch(RequestContext requestContext,
+                                          Elide elide,
+                                          Function<RequestContext, Object> userFunction) {
+    Request request = requestContext.request();
+
+    return toApolloResponse(
+        elide.patch(
+            headerValueIgnoreCase(request, "content-type").orElse(null),
+            headerValueIgnoreCase(request, "accept").orElse(null),
+            requestContext.pathArgs().get(PATH_PARAMETER_NAME),
+            payloadAsString(requestContext),
+            userFunction.apply(requestContext)));
   }
 
   private static Response<String> toApolloResponse(ElideResponse response) {
