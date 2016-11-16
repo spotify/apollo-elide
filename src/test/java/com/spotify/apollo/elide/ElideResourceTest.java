@@ -233,6 +233,29 @@ public class ElideResourceTest {
   }
 
   @Test
+  public void shouldSupportPatchViaOverrideHeader() throws Exception {
+    Thing thing = new Thing("1", null);
+    thing.description = "cooldesc";
+
+    Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing/1", "POST")
+        .withHeader("X-HTTP-Method-Override", "PATCH")
+        .withPayload(toBody(thing)));
+
+    if (response.payload().isPresent()) {
+      assertThat(response, hasStatus(withCode(OK)));
+    } else {
+      assertThat(response, hasStatus(withCode(NO_CONTENT)));
+    }
+
+    response = invokeRoute(Request.forUri("/prefix/thing/1", "GET"));
+
+    JsonNode jsonNode = successfulAsJson(response);
+
+    assertThat(jsonNode.get("data").get("attributes").get("description").asText(), is("cooldesc"));
+    assertThat(jsonNode.get("data").get("attributes").get("name").asText(), is("flerp"));
+  }
+
+  @Test
   public void shouldReturn415ForMediaTypeParametersInRequestContentType() throws Exception {
     Response<ByteString> response = invokeRoute(Request.forUri("/prefix/thing", "POST")
         .withHeader("content-type", "application/vnd.api+json; charset=utf-8")
