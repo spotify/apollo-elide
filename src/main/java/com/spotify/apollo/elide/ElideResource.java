@@ -168,7 +168,7 @@ public class ElideResource {
   }
 
   private static boolean isPatchOverride(Request request) {
-    return request.header("X-HTTPz-Method-Override")
+    return request.header("X-HTTP-Method-Override")
         .map(override -> override.equalsIgnoreCase("PATCH"))
         .orElse(false);
   }
@@ -185,11 +185,7 @@ public class ElideResource {
 
   private static SyncHandler<Response<String>> patch(Elide elide,
                                                      Function<RequestContext, Object> userFunction) {
-    return requestContext -> {
-      Request request = requestContext.request();
-
-      return doPatch(requestContext, elide, userFunction);
-    };
+    return requestContext -> doPatch(requestContext, elide, userFunction);
   }
 
   private static Response<String> doPatch(RequestContext requestContext,
