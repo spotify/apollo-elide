@@ -19,8 +19,3 @@ to try it out and give us feedback in the form of issue reports or PRs!
 This project adheres to the [Open Code of Conduct][code-of-conduct]. By participating, you are expected to honor this code.
 
 [code-of-conduct]: https://github.com/spotify/code-of-conduct/blob/master/code-of-conduct.md
-
-
-# TODO notes
-
-- support PATCH via X-HTTP-Method-Override: PATCH header
