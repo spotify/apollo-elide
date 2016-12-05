@@ -9,13 +9,13 @@
 
     <name>Apollo Elide integration</name>
     <artifactId>apollo-elide</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.3</version>
 
     <scm>
         <url>https://github.com/spotify/apollo-elide</url>
         <connection>scm:git:ssh://git@github.com/spotify/apollo-elide</connection>
         <developerConnection>scm:git:ssh://git@github.com/spotify/apollo-elide</developerConnection>
-        <tag>HEAD</tag>
+        <tag>v0.0.3</tag>
     </scm>
 
     <developers>
